@@ -31,7 +31,29 @@ pub struct UpstreamConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct RateLimitConfig {
-    pub requests_per_minute: u32,
+    /// **The load-bearing knob.** Fraction of `upstream.budget_per_hour`
+    /// the consumer is allowed to use, expressed as a decimal in
+    /// (0, 1]. Examples:
+    ///
+    ///   - `0.01` = 1%  → 50 req/hr  (period ≈ 72s)  for GitHub authenticated
+    ///   - `0.10` = 10% → 500 req/hr (period ≈ 7.2s) for GitHub authenticated
+    ///   - `0.05` = 5%  → 250 req/hr
+    ///
+    /// `LeakyBucket::new` derives the actual admission interval from
+    /// `quota_pct × budget_per_hour / 3600` requests-per-second. No
+    /// other knob touches the rate; pressure_*/jitter_/burst all
+    /// operate on top of this base.
+    ///
+    /// Defaults to `0.10` (10% — historical default) so omitting the
+    /// field in old configs preserves prior behavior.
+    #[serde(default = "default_quota_pct")]
+    pub quota_pct: f64,
+    /// Optional explicit override of `requests_per_minute`. When set
+    /// (>0), takes precedence over `quota_pct`. Useful for testing
+    /// or when the upstream's `budget_per_hour` is unknown / unstable.
+    /// Generally LEAVE UNSET — let `quota_pct` drive.
+    #[serde(default)]
+    pub requests_per_minute_override: Option<f64>,
     pub pressure_warn_pct: u8,
     pub pressure_critical_pct: u8,
     pub jitter_pct: f64,
@@ -41,6 +63,9 @@ pub struct RateLimitConfig {
     pub honor_etag: bool,
 }
 
+fn default_quota_pct() -> f64 {
+    0.10
+}
 fn default_burst() -> u32 {
     1
 }
@@ -119,6 +144,25 @@ impl Config {
         Self::load(path)
     }
 
+    /// Compute the effective request-per-minute target. If
+    /// `requests_per_minute_override` is set, use it; otherwise
+    /// derive from `quota_pct × budget_per_hour / 60`.
+    #[must_use]
+    pub fn target_rpm(&self) -> f64 {
+        if let Some(rpm) = self.rate_limit.requests_per_minute_override {
+            if rpm > 0.0 {
+                return rpm;
+            }
+        }
+        f64::from(self.upstream.budget_per_hour) * self.rate_limit.quota_pct / 60.0
+    }
+
+    /// Effective requests-per-hour target (for alert rules + logs).
+    #[must_use]
+    pub fn target_rph(&self) -> f64 {
+        self.target_rpm() * 60.0
+    }
+
     /// Validate cross-cutting invariants the schema can't express.
     ///
     /// # Errors
@@ -129,14 +173,34 @@ impl Config {
                 "pressure_critical_pct must be <= pressure_warn_pct".into(),
             ));
         }
-        // 10% sanity ceiling on the headline budget split.
+        if !(0.0..=1.0).contains(&self.rate_limit.quota_pct) {
+            return Err(crate::Error::Config(format!(
+                "rate_limit.quota_pct ({}) must be in (0, 1]",
+                self.rate_limit.quota_pct
+            )));
+        }
+        if self.rate_limit.quota_pct == 0.0
+            && self.rate_limit.requests_per_minute_override.is_none()
+        {
+            return Err(crate::Error::Config(
+                "rate_limit.quota_pct=0 with no override means no requests would ever be admitted"
+                    .into(),
+            ));
+        }
+        // The headline ceiling: derived rpm must be ≤ budget_pct_max
+        // of upstream's per-minute budget. budget_pct_max is the
+        // operator-set "absolute cap" (e.g. 10%) that quota_pct must
+        // respect.
         let upstream_per_minute = f64::from(self.upstream.budget_per_hour) / 60.0;
         let allowed = upstream_per_minute * (f64::from(self.upstream.budget_pct_max) / 100.0);
-        if f64::from(self.rate_limit.requests_per_minute) > allowed * 1.001 {
+        let target = self.target_rpm();
+        if target > allowed * 1.001 {
             return Err(crate::Error::Config(format!(
-                "rate_limit.requests_per_minute ({}) exceeds budget_pct_max ({}) of \
-                 budget_per_hour ({}) → allowed {:.2}/min",
-                self.rate_limit.requests_per_minute,
+                "target_rpm ({:.2}/min from quota_pct={:.4}) exceeds budget_pct_max ({}%) of \
+                 budget_per_hour ({}) → allowed {:.2}/min. Lower quota_pct or raise \
+                 budget_pct_max.",
+                target,
+                self.rate_limit.quota_pct,
                 self.upstream.budget_pct_max,
                 self.upstream.budget_per_hour,
                 allowed,
@@ -152,8 +216,9 @@ mod tests {
 
     #[test]
     fn validates_budget_share() {
+        // 50% > 10% absolute cap → rejected.
         let mut cfg = base_config();
-        cfg.rate_limit.requests_per_minute = 100; // way over 10% of 5000/hr
+        cfg.rate_limit.quota_pct = 0.50;
         assert!(cfg.validate().is_err());
     }
 
@@ -161,6 +226,42 @@ mod tests {
     fn accepts_within_budget() {
         let cfg = base_config();
         assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn quota_pct_drives_target_rpm() {
+        let mut cfg = base_config();
+        cfg.rate_limit.quota_pct = 0.01; // 1%
+        // 5000/hr × 1% = 50/hr → 50/60 ≈ 0.833 rpm
+        let rpm = cfg.target_rpm();
+        assert!((rpm - 0.833_333_3).abs() < 0.001, "got {rpm}");
+        // budget_pct_max=10 still leaves headroom (0.833 < 8.333) — accepts.
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn override_supersedes_quota_pct() {
+        let mut cfg = base_config();
+        cfg.rate_limit.quota_pct = 0.10;
+        cfg.rate_limit.requests_per_minute_override = Some(2.0);
+        assert!((cfg.target_rpm() - 2.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn rejects_quota_pct_out_of_range() {
+        let mut cfg = base_config();
+        cfg.rate_limit.quota_pct = 1.5;
+        assert!(cfg.validate().is_err());
+        cfg.rate_limit.quota_pct = -0.1;
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_zero_quota_pct_without_override() {
+        let mut cfg = base_config();
+        cfg.rate_limit.quota_pct = 0.0;
+        cfg.rate_limit.requests_per_minute_override = None;
+        assert!(cfg.validate().is_err());
     }
 
     fn base_config() -> Config {
@@ -171,7 +272,8 @@ mod tests {
                 budget_pct_max: 10,
             },
             rate_limit: RateLimitConfig {
-                requests_per_minute: 8,
+                quota_pct: 0.10,
+                requests_per_minute_override: None,
                 pressure_warn_pct: 50,
                 pressure_critical_pct: 25,
                 jitter_pct: 0.30,

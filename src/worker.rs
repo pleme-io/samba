@@ -29,8 +29,9 @@ impl<U: UpstreamApi> JetStreamPullWorker<U> {
     /// the config validation fails.
     pub fn new(upstream: U, cfg: Config) -> crate::Result<Self> {
         cfg.validate()?;
+        let target_rpm = cfg.target_rpm();
         let bucket = Arc::new(LeakyBucket::new(
-            cfg.rate_limit.requests_per_minute,
+            target_rpm,
             cfg.rate_limit.pressure_warn_pct,
             cfg.rate_limit.pressure_critical_pct,
             cfg.rate_limit.jitter_pct,
@@ -56,7 +57,9 @@ impl<U: UpstreamApi> JetStreamPullWorker<U> {
             upstream = U::NAME,
             stream = %self.cfg.nats.stream,
             consumer = %self.cfg.nats.consumer,
-            rpm = self.cfg.rate_limit.requests_per_minute,
+            quota_pct = self.cfg.rate_limit.quota_pct,
+            target_rpm = self.cfg.target_rpm(),
+            target_rph = self.cfg.target_rph(),
             "samba worker starting"
         );
 

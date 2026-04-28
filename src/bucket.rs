@@ -64,10 +64,18 @@ impl PressureLevel {
 /// available. The next-token time is computed from the configured
 /// rate × current `PressureLevel` × random jitter. Burst > 1 lets
 /// the bucket pre-admit multiple tokens up to the burst ceiling.
+///
+/// Rate is `f64` (not `u32`) so `Config::target_rpm()` — which
+/// derives from `quota_pct × budget_per_hour / 60` — can carry
+/// fractional rates honestly. Examples:
+///
+///   - 1% of 5000/hr → 0.833 rpm → period ≈ 72s
+///   - 5% of 5000/hr → 4.167 rpm → period ≈ 14.4s
+///   - 10% of 5000/hr → 8.333 rpm → period ≈ 7.2s
 #[derive(Debug)]
 pub struct LeakyBucket {
-    /// Nominal admission rate, requests per minute.
-    requests_per_minute: u32,
+    /// Nominal admission rate, requests per minute (fractional OK).
+    requests_per_minute: f64,
     /// Headroom % below which the bucket halves.
     pressure_warn_pct: f64,
     /// Headroom % below which the bucket quarters.
@@ -97,14 +105,16 @@ impl LeakyBucket {
     /// # Errors
     /// Returns `Error::Config` for any invalid argument.
     pub fn new(
-        requests_per_minute: u32,
+        requests_per_minute: f64,
         pressure_warn_pct: u8,
         pressure_critical_pct: u8,
         jitter_pct: f64,
         burst: u32,
     ) -> crate::Result<Self> {
-        if requests_per_minute == 0 {
-            return Err(crate::Error::Config("requests_per_minute must be > 0".into()));
+        if !requests_per_minute.is_finite() || requests_per_minute <= 0.0 {
+            return Err(crate::Error::Config(
+                "requests_per_minute must be > 0 and finite".into(),
+            ));
         }
         if !(0.0..=1.0).contains(&jitter_pct) {
             return Err(crate::Error::Config("jitter_pct must be in [0, 1]".into()));
@@ -174,19 +184,17 @@ impl LeakyBucket {
     /// Effective rate (rpm × multiplier, rounded for human display).
     pub async fn effective_rpm(&self) -> f64 {
         let s = self.state.lock().await;
-        f64::from(self.requests_per_minute) * s.level.pace_multiplier()
+        self.requests_per_minute * s.level.pace_multiplier()
     }
 
     fn replenish(&self, s: &mut BucketState) {
-        let rate_per_sec =
-            (f64::from(self.requests_per_minute) * s.level.pace_multiplier()) / 60.0;
+        let rate_per_sec = (self.requests_per_minute * s.level.pace_multiplier()) / 60.0;
         let elapsed = s.last_admission.elapsed().as_secs_f64();
         s.tokens = (s.tokens + elapsed * rate_per_sec).min(f64::from(self.burst));
     }
 
     fn next_admission_wait(&self, s: &BucketState) -> Duration {
-        let rate_per_sec =
-            (f64::from(self.requests_per_minute) * s.level.pace_multiplier()) / 60.0;
+        let rate_per_sec = (self.requests_per_minute * s.level.pace_multiplier()) / 60.0;
         // Tokens needed to reach 1.0; compute the wait at current rate.
         let needed = 1.0 - s.tokens;
         let nominal_secs = needed / rate_per_sec;
@@ -227,12 +235,23 @@ mod tests {
 
     #[test]
     fn rejects_zero_rpm() {
-        assert!(LeakyBucket::new(0, 50, 25, 0.3, 1).is_err());
+        assert!(LeakyBucket::new(0.0, 50, 25, 0.3, 1).is_err());
+    }
+
+    #[test]
+    fn rejects_negative_rpm() {
+        assert!(LeakyBucket::new(-1.0, 50, 25, 0.3, 1).is_err());
     }
 
     #[test]
     fn rejects_inverted_pressure_thresholds() {
         // critical > warn is nonsense
-        assert!(LeakyBucket::new(8, 25, 50, 0.3, 1).is_err());
+        assert!(LeakyBucket::new(8.0, 25, 50, 0.3, 1).is_err());
+    }
+
+    #[test]
+    fn accepts_fractional_rpm() {
+        // 1% of 5000/hr = 0.833 rpm
+        assert!(LeakyBucket::new(0.833, 50, 25, 0.3, 1).is_ok());
     }
 }
