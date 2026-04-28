@@ -34,10 +34,13 @@ pub trait UpstreamApi: Send + Sync + 'static {
     /// kebab-case slug: `github`, `datadog`, `slack-webhook`, etc.
     const NAME: &'static str;
 
-    /// Authoritative budget for the upstream credential, requests
-    /// per hour. The chart's `budgetPerHour` value should match.
-    /// Used in alert rules to compute the 10% headroom threshold.
-    const BUDGET_PER_HOUR: u32;
+    /// Initial estimate of the upstream credential's budget in
+    /// requests per hour. Used as a fallback before the first
+    /// response arrives + as the divisor for headroom percentages
+    /// in alert rules. The TRUE limit is observed at runtime via
+    /// `rate_limit_total()` and the bucket adjusts dynamically — so
+    /// this constant is a hint, not a source of truth.
+    const INITIAL_BUDGET_PER_HOUR: u32;
 
     /// The job payload the producer publishes. Must round-trip JSON
     /// because that's the wire format on NATS.
@@ -64,6 +67,20 @@ pub trait UpstreamApi: Send + Sync + 'static {
     /// The worker uses this to compute pressure and shrink the
     /// bucket adaptively.
     fn rate_limit_remaining(&self, response: &Self::Response) -> Option<u32>;
+
+    /// Report `X-RateLimit-Limit` (or equivalent) from the response —
+    /// the upstream's CURRENT total budget for the credential window.
+    /// The worker uses this as the divisor for `quota_pct` so the
+    /// bucket's effective rate tracks the upstream's actual ceiling
+    /// (which can shift between fine-grained PAT vs classic vs GHE
+    /// vs App tokens, and over time as plans change).
+    ///
+    /// Default `None` for upstreams that don't expose a total.
+    /// Worker falls back to `INITIAL_BUDGET_PER_HOUR` until the
+    /// first response with a real value arrives.
+    fn rate_limit_total(&self, _response: &Self::Response) -> Option<u32> {
+        None
+    }
 
     /// Whether a 304-equivalent (cached / no-change) response
     /// occurred — these don't count against the upstream's quota and

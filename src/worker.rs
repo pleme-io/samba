@@ -29,9 +29,9 @@ impl<U: UpstreamApi> JetStreamPullWorker<U> {
     /// the config validation fails.
     pub fn new(upstream: U, cfg: Config) -> crate::Result<Self> {
         cfg.validate()?;
-        let target_rpm = cfg.target_rpm();
         let bucket = Arc::new(LeakyBucket::new(
-            target_rpm,
+            cfg.rate_limit.quota_pct,
+            f64::from(cfg.upstream.budget_per_hour),
             cfg.rate_limit.pressure_warn_pct,
             cfg.rate_limit.pressure_critical_pct,
             cfg.rate_limit.jitter_pct,
@@ -156,10 +156,31 @@ impl<U: UpstreamApi> JetStreamPullWorker<U> {
                         .with_label_values(&[U::NAME, outcome_label])
                         .inc();
 
-                    // Adaptive shrinkage on observed headroom.
+                    // Adaptive feedback loop, driven by what the
+                    // upstream actually reports — NOT what we hardcoded:
+                    //
+                    // 1. `rate_limit_total` (X-RateLimit-Limit for
+                    //    GitHub) tells us the upstream's CURRENT
+                    //    ceiling. The bucket's effective rpm becomes
+                    //    `quota_pct × observed_total / 60`. Tracks
+                    //    GitHub's ceiling shifts (PAT vs App vs GHE)
+                    //    automatically.
+                    //
+                    // 2. `rate_limit_remaining` against the same
+                    //    observed total drives PressureLevel
+                    //    shrinkage (1.0 → 0.5 → 0.25 → 0.125).
+                    //
+                    // Falls back to INITIAL_BUDGET_PER_HOUR before
+                    // the first response with headers arrives.
+                    let observed_total = self
+                        .upstream
+                        .rate_limit_total(&resp)
+                        .unwrap_or(U::INITIAL_BUDGET_PER_HOUR);
+                    self.bucket.record_observed_limit(observed_total).await;
+
                     if let Some(remaining) = self.upstream.rate_limit_remaining(&resp) {
                         self.bucket
-                            .record_headroom(remaining, U::BUDGET_PER_HOUR)
+                            .record_headroom(remaining, observed_total)
                             .await;
                         self.metrics
                             .rate_limit_remaining
