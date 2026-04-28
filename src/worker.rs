@@ -197,10 +197,122 @@ impl<U: UpstreamApi> JetStreamPullWorker<U> {
 }
 
 async fn serve_http(metrics_port: u16, health_port: u16, metrics: Metrics) {
-    // Minimal HTTP server: /metrics on metrics_port, /healthz + /ready on health_port.
-    // Full impl deferred to first integration milestone — scaffolds the surface so the
-    // chart's probe configuration matches the binary's listen ports.
-    let _ = (metrics_port, health_port, metrics);
-    info!(metrics_port, health_port, "metrics + health endpoints (impl pending)");
+    // Two listeners: /metrics on metrics_port (Prometheus scrape) and
+    // /healthz + /ready on health_port (kubelet probes). Both are
+    // tiny — no router, no middleware. Just enough to satisfy the
+    // chart's probe config + ServiceMonitor scrape.
+    let m1 = metrics.clone();
+    let m2 = metrics;
+    tokio::spawn(serve_metrics(metrics_port, m1));
+    tokio::spawn(serve_health(health_port, m2));
     futures::future::pending::<()>().await;
+}
+
+async fn serve_metrics(port: u16, metrics: Metrics) {
+    use http_body_util::Full;
+    use hyper::body::Bytes;
+    use hyper::service::service_fn;
+    use hyper::{Method, Request, Response, StatusCode};
+    use hyper_util::rt::{TokioIo, TokioTimer};
+    use prometheus::Encoder;
+
+    let addr = format!("0.0.0.0:{port}");
+    let listener = match tokio::net::TcpListener::bind(&addr).await {
+        Ok(l) => l,
+        Err(e) => {
+            error!(error = %e, %addr, "metrics: bind failed");
+            return;
+        }
+    };
+    info!(%addr, "metrics: listening on /metrics");
+
+    loop {
+        let (stream, _) = match listener.accept().await {
+            Ok(p) => p,
+            Err(e) => {
+                error!(error = %e, "metrics: accept failed");
+                continue;
+            }
+        };
+        let io = TokioIo::new(stream);
+        let m = metrics.clone();
+        tokio::spawn(async move {
+            let svc = service_fn(move |req: Request<hyper::body::Incoming>| {
+                let m = m.clone();
+                async move {
+                    if req.method() != Method::GET || req.uri().path() != "/metrics" {
+                        return Ok::<_, hyper::Error>(
+                            Response::builder()
+                                .status(StatusCode::NOT_FOUND)
+                                .body(Full::new(Bytes::from_static(b"not found")))
+                                .unwrap(),
+                        );
+                    }
+                    let encoder = prometheus::TextEncoder::new();
+                    let mut buf = Vec::new();
+                    let _ = encoder.encode(&m.registry.gather(), &mut buf);
+                    Ok(Response::builder()
+                        .status(StatusCode::OK)
+                        .header("content-type", encoder.format_type())
+                        .body(Full::new(Bytes::from(buf)))
+                        .unwrap())
+                }
+            });
+            let _ = hyper::server::conn::http1::Builder::new()
+                .timer(TokioTimer::new())
+                .serve_connection(io, svc)
+                .await;
+        });
+    }
+}
+
+async fn serve_health(port: u16, _metrics: Metrics) {
+    use http_body_util::Full;
+    use hyper::body::Bytes;
+    use hyper::service::service_fn;
+    use hyper::{Method, Request, Response, StatusCode};
+    use hyper_util::rt::{TokioIo, TokioTimer};
+
+    let addr = format!("0.0.0.0:{port}");
+    let listener = match tokio::net::TcpListener::bind(&addr).await {
+        Ok(l) => l,
+        Err(e) => {
+            error!(error = %e, %addr, "health: bind failed");
+            return;
+        }
+    };
+    info!(%addr, "health: listening on /healthz, /ready");
+
+    loop {
+        let (stream, _) = match listener.accept().await {
+            Ok(p) => p,
+            Err(e) => {
+                error!(error = %e, "health: accept failed");
+                continue;
+            }
+        };
+        let io = TokioIo::new(stream);
+        tokio::spawn(async move {
+            let svc = service_fn(|req: Request<hyper::body::Incoming>| async move {
+                let path = req.uri().path();
+                let ok = req.method() == Method::GET
+                    && (path == "/healthz" || path == "/ready" || path == "/");
+                let (status, body): (StatusCode, &'static [u8]) = if ok {
+                    (StatusCode::OK, b"ok")
+                } else {
+                    (StatusCode::NOT_FOUND, b"not found")
+                };
+                Ok::<_, hyper::Error>(
+                    Response::builder()
+                        .status(status)
+                        .body(Full::new(Bytes::from_static(body)))
+                        .unwrap(),
+                )
+            });
+            let _ = hyper::server::conn::http1::Builder::new()
+                .timer(TokioTimer::new())
+                .serve_connection(io, svc)
+                .await;
+        });
+    }
 }
