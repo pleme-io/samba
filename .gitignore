@@ -3,3 +3,4 @@
 /result-*
 .direnv
 *.swp
+Cargo.build-spec.json
