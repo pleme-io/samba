@@ -1,6 +1,6 @@
 [package]
 name = "samba"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 rust-version = "1.89.0"
 description = "Samba — typed rate-limited consumer primitive for pleme-io. Provides UpstreamApi trait, LeakyBucket pacing, and JetStreamPullWorker that compose into rate-limited workers in ~30 LOC of binary code."
@@ -15,29 +15,54 @@ pedantic = { level = "warn", priority = -1 }
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 
+[features]
+# `worker` (default) pulls the NATS JetStream drain + Prometheus/HTTP
+# metrics server + YAML config loader. Disable it
+# (`default-features = false`) to consume ONLY the NATS-free pacing core
+# — `LeakyBucket` + `PressureLevel` + the light `Error`/`Result` — with
+# zero async-nats / hyper / prometheus in the dependency closure. magma's
+# apply engine is the canonical light-core consumer (a sequential
+# in-process pacer, not a NATS worker).
+default = ["worker"]
+worker = [
+  "dep:async-nats",
+  "dep:async-trait",
+  "dep:serde",
+  "dep:serde_yaml_ng",
+  "dep:tracing-subscriber",
+  "dep:prometheus",
+  "dep:hyper",
+  "dep:hyper-util",
+  "dep:http-body-util",
+  "dep:bytes",
+  "dep:futures",
+]
+
 [dependencies]
-async-nats = "0.38"
-async-trait = "0.1"
-serde = { version = "1", features = ["derive"] }
+# ── Light core (always on): LeakyBucket pacing + typed errors ──
 serde_json = "1"
-serde_yaml_ng = "0.10"
 thiserror = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "signal"] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-prometheus = "0.13"
-hyper = { version = "1", features = ["server", "http1"] }
-hyper-util = { version = "0.1", features = ["server", "tokio"] }
-http-body-util = "0.1"
 rand = "0.9"
-futures = "0.3"
-bytes = "1"
+# ── `worker`-only (NATS drain + metrics server + YAML config) ──
+async-nats = { version = "0.38", optional = true }
+async-trait = { version = "0.1", optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+serde_yaml_ng = { version = "0.10", optional = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"], optional = true }
+prometheus = { version = "0.13", optional = true }
+hyper = { version = "1", features = ["server", "http1"], optional = true }
+hyper-util = { version = "0.1", features = ["server", "tokio"], optional = true }
+http-body-util = { version = "0.1", optional = true }
+bytes = { version = "1", optional = true }
+futures = { version = "0.3", optional = true }
 
 [dev-dependencies]
 assert_matches = "1"
 pretty_assertions = "1"
 proptest = "1"
-tokio = { version = "1", features = ["test-util"] }
+tokio = { version = "1", features = ["test-util", "rt-multi-thread", "macros"] }
 
 [profile.release]
 opt-level = "z"

@@ -34,18 +34,23 @@ pub enum Error {
     Metrics(String),
 }
 
-impl From<async_nats::Error> for Error {
-    fn from(e: async_nats::Error) -> Self {
-        Self::Nats(e.to_string())
-    }
-}
-
+// `From<serde_json::Error>` stays in the light core (serde_json is a base
+// dep). The async-nats + serde_yaml_ng conversions live behind `worker`
+// since those crates are worker-only.
 impl From<serde_json::Error> for Error {
     fn from(e: serde_json::Error) -> Self {
         Self::Serde(e.to_string())
     }
 }
 
+#[cfg(feature = "worker")]
+impl From<async_nats::Error> for Error {
+    fn from(e: async_nats::Error) -> Self {
+        Self::Nats(e.to_string())
+    }
+}
+
+#[cfg(feature = "worker")]
 impl From<serde_yaml_ng::Error> for Error {
     fn from(e: serde_yaml_ng::Error) -> Self {
         Self::Serde(e.to_string())

@@ -78,20 +78,34 @@
 
 #![forbid(unsafe_code)]
 
+// Light core — always available, NATS-free (the pacing primitive).
 pub mod bucket;
-pub mod config;
 pub mod error;
+
+// `worker` feature — the NATS JetStream drain + metrics server + config
+// loader. Gated so light-core consumers (magma's apply pacer) don't pull
+// async-nats / hyper / prometheus.
+#[cfg(feature = "worker")]
+pub mod config;
+#[cfg(feature = "worker")]
 pub mod metrics;
+#[cfg(feature = "worker")]
 pub mod upstream;
+#[cfg(feature = "worker")]
 pub mod worker;
 
 pub use bucket::{LeakyBucket, PressureLevel};
+pub use error::{Error, Result};
+
+#[cfg(feature = "worker")]
 pub use config::{
     Config, NatsConfig, RateLimitConfig, UpstreamConfig, MetricsConfig, HealthConfig,
 };
-pub use error::{Error, Result};
+#[cfg(feature = "worker")]
 pub use metrics::Metrics;
+#[cfg(feature = "worker")]
 pub use upstream::UpstreamApi;
+#[cfg(feature = "worker")]
 pub use worker::JetStreamPullWorker;
 
 /// Standard metric name constants — every samba-based worker emits

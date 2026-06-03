@@ -298,11 +298,11 @@ mod tests {
         assert!(LeakyBucket::new(0.10, 5000.0, 25, 50, 0.3, 1).is_err());
     }
 
-    #[test]
-    fn accepts_fractional_rpm() {
+    #[tokio::test]
+    async fn accepts_fractional_rpm() {
         // 1% of 5000/hr → 0.833 rpm
         let bucket = LeakyBucket::new(0.01, 5000.0, 50, 25, 0.3, 1).unwrap();
-        let rpm = futures::executor::block_on(bucket.target_rpm());
+        let rpm = bucket.target_rpm().await;
         assert!((rpm - 0.833).abs() < 0.01, "got {rpm}");
     }
 
