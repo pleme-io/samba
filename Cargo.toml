@@ -1,6 +1,6 @@
 [package]
 name = "samba"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2024"
 rust-version = "1.89.0"
 description = "Samba — typed rate-limited consumer primitive for pleme-io. Provides UpstreamApi trait, LeakyBucket pacing, and JetStreamPullWorker that compose into rate-limited workers in ~30 LOC of binary code."
