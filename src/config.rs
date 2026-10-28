@@ -129,7 +129,7 @@ impl Config {
         let path = path.as_ref();
         let raw = std::fs::read_to_string(path)
             .map_err(|e| crate::Error::Config(format!("read {}: {e}", path.display())))?;
-        serde_yaml_ng::from_str(&raw)
+        serde_norway::from_str(&raw)
             .map_err(|e| crate::Error::Config(format!("parse {}: {e}", path.display())))
     }
 

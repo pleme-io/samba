@@ -51,8 +51,8 @@ impl From<async_nats::Error> for Error {
 }
 
 #[cfg(feature = "worker")]
-impl From<serde_yaml_ng::Error> for Error {
-    fn from(e: serde_yaml_ng::Error) -> Self {
+impl From<serde_norway::Error> for Error {
+    fn from(e: serde_norway::Error) -> Self {
         Self::Serde(e.to_string())
     }
 }
