@@ -102,8 +102,8 @@ struct BucketState {
     requests_per_minute: f64,
     /// Currently held pressure level.
     level: PressureLevel,
-    /// Last admission time.
-    last_admission: Instant,
+    /// When `tokens` was last brought up to date.
+    last_replenish: Instant,
     /// Tokens currently held; replenishes at the nominal rate.
     tokens: f64,
 }
@@ -155,7 +155,7 @@ impl LeakyBucket {
             state: Mutex::new(BucketState {
                 requests_per_minute: initial_rpm,
                 level: PressureLevel::Healthy,
-                last_admission: Instant::now(),
+                last_replenish: Instant::now(),
                 tokens: f64::from(burst),
             }),
         })
@@ -189,7 +189,6 @@ impl LeakyBucket {
                 self.replenish(&mut s);
                 if s.tokens >= 1.0 {
                     s.tokens -= 1.0;
-                    s.last_admission = Instant::now();
                     return start.elapsed();
                 }
                 self.next_admission_wait(&s)
@@ -233,7 +232,9 @@ impl LeakyBucket {
 
     fn replenish(&self, s: &mut BucketState) {
         let rate_per_sec = (s.requests_per_minute * s.level.pace_multiplier()) / 60.0;
-        let elapsed = s.last_admission.elapsed().as_secs_f64();
+        let now = Instant::now();
+        let elapsed = now.duration_since(s.last_replenish).as_secs_f64();
+        s.last_replenish = now;
         s.tokens = (s.tokens + elapsed * rate_per_sec).min(f64::from(self.burst));
     }
 
@@ -326,5 +327,60 @@ mod tests {
         bucket.record_observed_limit(0).await; // defensive
         let after = bucket.target_rpm().await;
         assert!((before - after).abs() < 1e-9);
+    }
+
+    const ADMISSIONS: u32 = 30;
+    const PERIOD: Duration = Duration::from_millis(20);
+    const RPH_FOR_PERIOD: f64 = 180_000.0;
+
+    async fn admission_span(jitter_pct: f64, tasks: u32, stagger: Duration) -> Duration {
+        let bucket = std::sync::Arc::new(
+            LeakyBucket::new(1.0, RPH_FOR_PERIOD, 50, 25, jitter_pct, 1).unwrap(),
+        );
+        let start = Instant::now();
+        let waiters: Vec<_> = (0..tasks)
+            .map(|task| {
+                let bucket = bucket.clone();
+                tokio::spawn(async move {
+                    tokio::time::sleep(stagger * task).await;
+                    for _ in 0..ADMISSIONS / tasks {
+                        bucket.acquire().await;
+                    }
+                })
+            })
+            .collect();
+        for waiter in waiters {
+            waiter.await.unwrap();
+        }
+        start.elapsed()
+    }
+
+    fn assert_paced(span: Duration) {
+        let floor = (PERIOD * (ADMISSIONS - 1)).mul_f64(0.99);
+        assert!(
+            span >= floor,
+            "{ADMISSIONS} admissions in {span:?}, floor {floor:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn staggered_concurrent_acquires_hold_the_rate() {
+        assert_paced(admission_span(0.0, ADMISSIONS, Duration::from_millis(5)).await);
+    }
+
+    #[tokio::test]
+    async fn concurrent_acquires_with_the_appliers_jitter_hold_the_rate() {
+        assert_paced(admission_span(0.1, ADMISSIONS, Duration::from_millis(5)).await);
+    }
+
+    #[tokio::test]
+    async fn an_idle_bucket_saves_no_more_than_its_burst() {
+        let bucket = LeakyBucket::new(1.0, RPH_FOR_PERIOD, 50, 25, 0.0, 2).unwrap();
+        tokio::time::sleep(PERIOD * 5).await;
+        let start = Instant::now();
+        for _ in 0..3 {
+            bucket.acquire().await;
+        }
+        assert!(start.elapsed() >= PERIOD.mul_f64(0.99), "{:?}", start.elapsed());
     }
 }
