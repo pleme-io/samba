@@ -1,8 +1,8 @@
 {
   "schema_version": 2,
-  "cargo_lock_sha256": "c8abb7e6c927e33bc890be01d61499ef7bf3aaafdab4c256e1c7c582b97310f6",
+  "cargo_lock_sha256": "94067a9b183d225194bc093f5b3a09ba9b4300a3e8d95920bbcbcd33e4e8db72",
   "manifest_sha256": {
-    "Cargo.toml": "df045e730915815e0294970b2531ff33d548225420f30abdb69797a3410920bb"
+    "Cargo.toml": "bbb5ead94c4ee210a9e16473ec521a617792061939e169a57a9860c99f84ef0f"
   },
   "target_resolves": {
     "base": {
@@ -588,7 +588,7 @@
           "std"
         ]
       },
-      "cc-1.10.0": {
+      "cc-1.11.0": {
         "runtime_dependencies": [
           {
             "name": "find_msvc_tools",
@@ -1927,7 +1927,7 @@
           },
           {
             "name": "utf8_iter",
-            "package_key": "utf8_iter-1.0.4",
+            "package_key": "utf8_iter-1.1.0",
             "kind": "normal",
             "features": [],
             "uses_default_features": false,
@@ -2298,7 +2298,7 @@
           },
           {
             "name": "utf8_iter",
-            "package_key": "utf8_iter-1.0.4",
+            "package_key": "utf8_iter-1.1.0",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -2413,7 +2413,7 @@
           "default"
         ]
       },
-      "log-0.4.34": {
+      "log-0.4.35": {
         "runtime_dependencies": [],
         "build_dependencies": [],
         "features": [
@@ -2506,7 +2506,7 @@
           },
           {
             "name": "log",
-            "package_key": "log-0.4.34",
+            "package_key": "log-0.4.35",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -3790,7 +3790,7 @@
         "build_dependencies": [],
         "features": []
       },
-      "samba-0.1.5": {
+      "samba-0.1.6": {
         "runtime_dependencies": [
           {
             "name": "async_nats",
@@ -5552,7 +5552,7 @@
         "runtime_dependencies": [
           {
             "name": "log",
-            "package_key": "log-0.4.34",
+            "package_key": "log-0.4.35",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -5877,7 +5877,23 @@
           "std"
         ]
       },
-      "utf8_iter-1.0.4": {
+      "utf8_iter-1.1.0": {
+        "runtime_dependencies": [
+          {
+            "name": "utf_types",
+            "package_key": "utf_types-1.0.0",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          }
+        ],
+        "build_dependencies": [],
+        "features": []
+      },
+      "utf_types-1.0.0": {
         "runtime_dependencies": [],
         "build_dependencies": [],
         "features": []
@@ -6474,7 +6490,7 @@
             "build_dependencies": [
               {
                 "name": "cc",
-                "package_key": "cc-1.10.0",
+                "package_key": "cc-1.11.0",
                 "kind": "build",
                 "features": [],
                 "uses_default_features": false,
@@ -6875,7 +6891,7 @@
             "build_dependencies": [
               {
                 "name": "cc",
-                "package_key": "cc-1.10.0",
+                "package_key": "cc-1.11.0",
                 "kind": "build",
                 "features": [],
                 "uses_default_features": false,
@@ -7220,7 +7236,7 @@
             "build_dependencies": [
               {
                 "name": "cc",
-                "package_key": "cc-1.10.0",
+                "package_key": "cc-1.11.0",
                 "kind": "build",
                 "features": [],
                 "uses_default_features": false,
@@ -7597,7 +7613,7 @@
             "build_dependencies": [
               {
                 "name": "cc",
-                "package_key": "cc-1.10.0",
+                "package_key": "cc-1.11.0",
                 "kind": "build",
                 "features": [],
                 "uses_default_features": false,
@@ -8010,7 +8026,7 @@
             "build_dependencies": [
               {
                 "name": "cc",
-                "package_key": "cc-1.10.0",
+                "package_key": "cc-1.11.0",
                 "kind": "build",
                 "features": [],
                 "uses_default_features": false,
@@ -8367,7 +8383,7 @@
             "build_dependencies": [
               {
                 "name": "cc",
-                "package_key": "cc-1.10.0",
+                "package_key": "cc-1.11.0",
                 "kind": "build",
                 "features": [],
                 "uses_default_features": false,
@@ -8571,7 +8587,7 @@
     "bytes-1.12.1": {
       "edition": "2021"
     },
-    "cc-1.10.0": {
+    "cc-1.11.0": {
       "edition": "2021"
     },
     "cfg-if-1.0.5": {
@@ -8778,7 +8794,7 @@
     "lock_api-0.4.14": {
       "edition": "2021"
     },
-    "log-0.4.34": {
+    "log-0.4.35": {
       "edition": "2021"
     },
     "matchers-0.2.0": {
@@ -8959,7 +8975,7 @@
     "ryu-1.0.23": {
       "edition": "2021"
     },
-    "samba-0.1.5": {
+    "samba-0.1.6": {
       "edition": "2024",
       "lib_target": {
         "name": "samba",
@@ -9162,7 +9178,10 @@
     "url-2.5.8": {
       "edition": "2018"
     },
-    "utf8_iter-1.0.4": {
+    "utf8_iter-1.1.0": {
+      "edition": "2021"
+    },
+    "utf_types-1.0.0": {
       "edition": "2021"
     },
     "version_check-0.9.5": {
