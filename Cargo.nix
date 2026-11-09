@@ -587,9 +587,9 @@ rec {
       };
       "cc" = rec {
         crateName = "cc";
-        version = "1.10.0";
+        version = "1.11.0";
         edition = "2021";
-        sha256 = "185yfn6np0m5x7hz1q7qf595sqzbbs2vc9dshxhssh1ydvx5bq46";
+        sha256 = "0ssz5frnjb3x873yhp2790xf9v8jz8hdbgj28i1gm861rvg8jn9p";
         dependencies = [
           {
             name = "find-msvc-tools";
@@ -2546,9 +2546,9 @@ rec {
       };
       "log" = rec {
         crateName = "log";
-        version = "0.4.34";
+        version = "0.4.35";
         edition = "2021";
-        sha256 = "1ihkzn0m33ab79fcl4mkb04n5iwqzbxzyw7l7hazqkffaqzbvy7r";
+        sha256 = "0p002750b2hab9bnlxxrvk5g9dvyaf23kiy39s6wsi6s29nzh5ax";
         authors = [
           "The Rust Project Developers"
         ];
@@ -4161,7 +4161,7 @@ rec {
       };
       "samba" = rec {
         crateName = "samba";
-        version = "0.1.6";
+        version = "0.1.7";
         edition = "2024";
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./.; };
         dependencies = [
@@ -6158,9 +6158,25 @@ rec {
       };
       "utf8_iter" = rec {
         crateName = "utf8_iter";
-        version = "1.0.4";
+        version = "1.1.0";
         edition = "2021";
-        sha256 = "1gmna9flnj8dbyd8ba17zigrp9c4c3zclngf5lnb5yvz1ri41hdn";
+        sha256 = "1w7d0f7xc46qfmb7m6zy5y6in1mblmzbhcyhx766zhkiwp9xjfxg";
+        authors = [
+          "Henri Sivonen <hsivonen@hsivonen.fi>"
+        ];
+        dependencies = [
+          {
+            name = "utf_types";
+            packageId = "utf_types";
+          }
+        ];
+
+      };
+      "utf_types" = rec {
+        crateName = "utf_types";
+        version = "1.0.0";
+        edition = "2021";
+        sha256 = "1dhbsnxfxxbg9a13anjfax5i7jyd51nkngs5g1r3c2lqhr944frs";
         authors = [
           "Henri Sivonen <hsivonen@hsivonen.fi>"
         ];
