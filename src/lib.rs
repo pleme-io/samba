@@ -6,11 +6,6 @@
 //! at a fixed pace; the rate-limit invariant becomes a theorem of
 //! the type system rather than a runtime guess.
 //!
-//! See the canonical theory in
-//! [pleme-io/theory/RATE-LIMITED-CONSUMERS.md][theory].
-//!
-//! [theory]: https://github.com/pleme-io/theory/blob/main/RATE-LIMITED-CONSUMERS.md
-//!
 //! # The shape, in one diagram
 //!
 //! ```text

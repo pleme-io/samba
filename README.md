@@ -7,9 +7,8 @@
 
 [![crate](https://img.shields.io/badge/crates.io-samba-orange)](https://crates.io/crates/samba)
 [![docs](https://img.shields.io/badge/docs-samba-blue)](https://docs.rs/samba)
-[![pleme-io](https://img.shields.io/badge/pleme--io-rate--limit-purple)](https://github.com/pleme-io/theory/blob/main/RATE-LIMITED-CONSUMERS.md)
 
-samba is L3 of the [rate-limited-consumer compounding pattern][theory] —
+samba is L3 of the rate-limited-consumer compounding pattern —
 the typed primitive every fleet-wide rate-limited worker stands on. Its
 public surface is three types:
 
@@ -23,7 +22,6 @@ A new rate-limited consumer is `~30 LOC` of `impl UpstreamApi` plus a
 chart with a single load-bearing knob: **`quotaPct`** (0–1; e.g. `0.01`
 = "use 1% of the upstream's reported quota"). samba does the rest.
 
-[theory]: https://github.com/pleme-io/theory/blob/main/RATE-LIMITED-CONSUMERS.md
 [`UpstreamApi`]: src/upstream.rs
 [`LeakyBucket`]: src/bucket.rs
 [`JetStreamPullWorker<U>`]: src/worker.rs
@@ -283,17 +281,12 @@ PrometheusRules match across consumers:
 8. Stream + consumer ownership is per-consumer-chart, not central
    broker config — Cilium-style identity.
 
-See [pleme-io/theory/RATE-LIMITED-CONSUMERS.md][theory] §III for the
-full invariant frame.
-
 ## License
 
 MIT. See [LICENSE](LICENSE).
 
 ## Related
 
-- [pleme-io/theory](https://github.com/pleme-io/theory) — the unified
-  computing theory; §RATE-LIMITED-CONSUMERS.md is the canonical L0.
 - [pleme-io/tend](https://github.com/pleme-io/tend) — the canonical
   consumer (GitHub HEAD watcher / fleet update controller).
 - [pleme-io/helmworks](https://github.com/pleme-io/helmworks) —

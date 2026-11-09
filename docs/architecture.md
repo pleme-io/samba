@@ -1,10 +1,8 @@
 # samba — architecture
 
 This document is the in-depth architectural reference for samba. The
-short version is in [README.md](../README.md). The fleet-wide pattern
-samba is L3 of is in [pleme-io/theory/RATE-LIMITED-CONSUMERS.md][theory].
-
-[theory]: https://github.com/pleme-io/theory/blob/main/RATE-LIMITED-CONSUMERS.md
+short version is in [README.md](../README.md). samba is L3 of the
+fleet-wide rate-limited-consumer pattern below.
 
 ## The six compounding layers
 
@@ -18,7 +16,7 @@ L4 Consumer   pleme-io/tend's `tend throttle`     — ~30 LOC + 5-line values pe
 L3 Rust       pleme-io/samba (this crate)         — UpstreamApi + LeakyBucket + JetStreamPullWorker
 L2 Broker     pleme-io/helmworks/pleme-nats       — JetStream broker, broker-only
 L1 Templates  pleme-io/helmworks/pleme-lib        — _jetstream_stream.tpl, _rate_limit_worker.tpl
-L0 Theory     pleme-io/theory                     — RATE-LIMITED-CONSUMERS.md (frame, invariants)
+L0 Invariant  README.md, Eight invariants         — the frame every layer keeps
 ```
 
 samba sits at L3 — the typed Rust primitive every binary stands on.
